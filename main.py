@@ -1,1 +1,6 @@
-# main python file for the project
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+import dm4bem# main python file for the project
