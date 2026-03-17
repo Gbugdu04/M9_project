@@ -35,38 +35,38 @@ Vol_people = H*Lp*B
 
 # width dictionary
 width = {}
-width["outer_stone"] = 0.5
+width["outer_stone"] = 0.2
 width["inner_stone"] = 0.2
 width["ground"] = 3
 width["roof"] = 0.2
-width["isolation"] = 0.4
-width["window"] = 0.04
+width["isolation"] = 0.08
+width["window"] = 0.004
 
 # materials dictionaries
 stone = {
-    "Conductivity": 1.400,       # W/(m·K)
-    "Density": 2300.0,           # kg/m³
-    "Specific heat": 880,        # J/(kg⋅K)"
+    "Conductivity": 3.500,       # W/(m·K)
+    "Density": 2800.0,           # kg/m³
+    "Specific heat": 1000,        # J/(kg⋅K)"
 }
-isolation = {                    # in some material
-    "Conductivity": 0.040,       # W/(m·K)
-    "Density": 16.0,             # kg/m³
-    "Specific heat": 1210,       # J/(kg⋅K)"
+isolation = {                    # in cork
+    "Conductivity": 0.050,       # W/(m·K)
+    "Density": 200.0,             # kg/m³
+    "Specific heat": 1560,       # J/(kg⋅K)"
 }
-roof = {                         # in wood
-    "Conductivity": 1.400,       # W/(m·K)
-    "Density": 2300.0,           # kg/m³
-    "Specific heat": 880,        # J/(kg⋅K)"
+roof = {                         # in wood / oak
+    "Conductivity": 0.180,       # W/(m·K)
+    "Density": 2000.0,           # kg/m³
+    "Specific heat": 705,        # J/(kg⋅K)"
 }
 glass = {                         
     "Conductivity": 1.400,       # W/(m·K)
-    "Density": 2300.0,           # kg/m³
-    "Specific heat": 880,        # J/(kg⋅K)"
+    "Density": 2500.0,           # kg/m³
+    "Specific heat": 750,        # J/(kg⋅K)"
 }
 ground = {                         
-    "Conductivity": 1.400,       # W/(m·K)
-    "Density": 2300.0,           # kg/m³
-    "Specific heat": 880,        # J/(kg⋅K)"
+    "Conductivity": 1.700,       # W/(m·K)
+    "Density": 1700.0,           # kg/m³
+    "Specific heat": 1600,        # J/(kg⋅K)"
 }
 air = {
     "Density": 1.2,              # kg/m³
@@ -158,8 +158,8 @@ C[16] = roof["Specific heat"]*      roof["Density"]*     S["Ground_people"]*    
 C[18] = ground["Specific heat"]*    ground["Density"]*   S["Ground_animal"]*      width["ground"]
 C[20] = ground["Specific heat"]*    ground["Density"]*   S["Ground_people"]*      width["ground"]
 
-C[3] = air["Specific heat"]*air["Density"]*Vol_animal
-C[7] = air["Specific heat"]*air["Density"]*Vol_people
+C[3] = 0#air["Specific heat"]*air["Density"]*Vol_animal
+C[7] = 0#air["Specific heat"]*air["Density"]*Vol_people
 
 C = np.diag(C)
 
@@ -191,3 +191,5 @@ rad_surf_north = dm4.sol_rad_tilt_surf(weather_data, wall_north, albedo)
 rad_surf_south = dm4.sol_rad_tilt_surf(weather_data, wall_south, albedo)
 rad_surf_horizon = dm4.sol_rad_tilt_surf(weather_data, roof_horizontal, albedo)
 
+max_dt = dm4.eigenvalues_analysis(C,A,G)
+print(max_dt)

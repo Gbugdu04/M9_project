@@ -32,6 +32,31 @@ def temperature(Tg,Tc,Te,nq):
     b[29] = Tc
     return b.T
 
+def eigenvalues_analysis(C,A,G):
+    # DAE (Differential Algebraic Equations), Eq.(13)
+    K = -A.T @ G @ A
+    C_diag = np.diag(C)
+    # Partition K and Kb based on values of diagonal of C, Eq.(14)
+    zero = np.nonzero(C_diag == 0)[0]
+    non_zero = np.nonzero(C_diag != 0)[0]
+    K00 = K[zero,:]
+    K00 = K00[:,zero]
+    K01 = K[zero, :]
+    K01 = K01[:,non_zero]
+    K10 = K[non_zero, :]
+    K10 = K10[:,zero]
+    K11 = K[non_zero, :]
+    K11 = K11[:,non_zero]
+    
+    Cc = C[non_zero, :]
+    Cc = Cc[:,non_zero]
+
+    # State equation, Eqs.(20), (21)
+    As = np.linalg.inv(Cc) @ (-K10 @ np.linalg.inv(K00) @ K01 + K11)
+    lambda_list = np.linalg.eig(As)[0]
+    lim_time = -2/min(lambda_list)
+    return lim_time
+
 def read_epw(filename, coerce_year=None):
     '''
     Read an Energy Plus Weather (EPW) file into a pandas dataframe.
