@@ -55,7 +55,7 @@ def eigenvalues_analysis(C,A,G):
     As = np.linalg.inv(Cc) @ (-K10 @ np.linalg.inv(K00) @ K01 + K11)
     lambda_list = np.linalg.eig(As)[0]
     lim_time = -2/min(lambda_list)
-    return lim_time
+    return lim_time,zero,non_zero
 
 def read_epw(filename, coerce_year=None):
     '''

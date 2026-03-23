@@ -12,14 +12,14 @@ La = 10 # m
 Lp = 6 # m
 
 # windows in east/west walls
-N_windows_animal = 4
-N_windows_people = 2
+N_windows_animal = 2
+N_windows_people = 1
 
 # Surfaces dictionary 
 S = {}
 S["Window"] = 1*2
-S["Windows_animal"] = 2*N_windows_animal*S["Window"]  # for 1 wall
-S["Windows_people"] = 2*N_windows_people*S["Window"]  # for 1 wall
+S["Windows_animal"] = N_windows_animal*S["Window"]  # for 1 wall
+S["Windows_people"] = N_windows_people*S["Window"]  # for 1 wall
 S["North_facade"] = B*H 
 S["Facade_animal"] = La*H - S["Windows_animal"]       # for 1 wall
 S["Facade_people"] = Lp*H - S["Windows_people"]       # for 1 wall
@@ -46,22 +46,26 @@ width["window"] = 0.004
 stone = {
     "Conductivity": 3.500,       # W/(m·K)
     "Density": 2800.0,           # kg/m³
-    "Specific heat": 1000,        # J/(kg⋅K)"
+    "Specific heat": 1000,       # J/(kg⋅K)"
+    "Absoptance":0.6,            # NaN
 }
 isolation = {                    # in cork
     "Conductivity": 0.050,       # W/(m·K)
-    "Density": 200.0,             # kg/m³
+    "Density": 200.0,            # kg/m³
     "Specific heat": 1560,       # J/(kg⋅K)"
+	"Absoptance":0.6,            # NaN
 }
 roof = {                         # in wood / oak
     "Conductivity": 0.180,       # W/(m·K)
     "Density": 2000.0,           # kg/m³
     "Specific heat": 705,        # J/(kg⋅K)"
+    "Absoptance":0.7,            # NaN
 }
 glass = {                         
     "Conductivity": 1.400,       # W/(m·K)
     "Density": 2500.0,           # kg/m³
     "Specific heat": 750,        # J/(kg⋅K)"
+	"Transmitance":0.8,			 # NaN
 }
 ground = {                         
     "Conductivity": 1.700,       # W/(m·K)
@@ -74,8 +78,8 @@ air = {
 }
 
 hi, he = 8, 25
-E = 200
 ACH = 1
+Qa = 200
 
 nq , nθ = 30 , 22
 
@@ -158,8 +162,8 @@ C[16] = roof["Specific heat"]*      roof["Density"]*     S["Ground_people"]*    
 C[18] = ground["Specific heat"]*    ground["Density"]*   S["Ground_animal"]*      width["ground"]
 C[20] = ground["Specific heat"]*    ground["Density"]*   S["Ground_people"]*      width["ground"]
 
-C[3] = 0#air["Specific heat"]*air["Density"]*Vol_animal
-C[7] = 0#air["Specific heat"]*air["Density"]*Vol_people
+#C[3] = air["Specific heat"]*air["Density"]*Vol_animal
+#C[7] = air["Specific heat"]*air["Density"]*Vol_people
 
 C = np.diag(C)
 
@@ -171,6 +175,7 @@ weather_data.index = weather_data.index.map(lambda t: t.replace(year=2000))
 start_date = '2000-06-29 12:00'
 end_date = '2000-07-02'
 weather_data = weather_data.loc[start_date:end_date]
+calendar = weather_data.index
 
 lat = 45
 # orientations of surfaces : 
@@ -181,7 +186,7 @@ wall_east = {'slope': 90, 'azimuth': -90, 'latitude': lat}
 wall_west = {'slope': 90, 'azimuth': 90, 'latitude': lat} 
 wall_north = {'slope': 90, 'azimuth': 180, 'latitude': lat} 
 wall_south = {'slope': 90, 'azimuth': 0, 'latitude': lat} 
-roof_horizontal = {'slope': 0, 'azimuth': 0, 'latitude': lat} 
+roof_horizontal = {'slope': 0, 'azimuth': 0, 'latitude': lat}
 
 albedo = 0.2
 
@@ -191,5 +196,73 @@ rad_surf_north = dm4.sol_rad_tilt_surf(weather_data, wall_north, albedo)
 rad_surf_south = dm4.sol_rad_tilt_surf(weather_data, wall_south, albedo)
 rad_surf_horizon = dm4.sol_rad_tilt_surf(weather_data, roof_horizontal, albedo)
 
-max_dt = dm4.eigenvalues_analysis(C,A,G)
-print(max_dt)
+max_dt,zero,nonzero = dm4.eigenvalues_analysis(C,A,G)
+dt = 3600
+if max_dt<dt:
+	print("System is chaotic")
+	quit()
+
+dt_H = dt/3600
+
+Ntps = len(weather_data)
+
+θ = np.zeros((nθ,Ntps))
+q = np.zeros((nq,Ntps))
+b = np.zeros((nq,Ntps)) 
+f = np.zeros((nθ,Ntps))
+
+
+for i in range(Ntps):
+	Etot = {}
+	Etot["N"] = rad_surf_north.at[calendar[i],"total"]
+	Etot["S"] = rad_surf_south.at[calendar[i],"total"]
+	Etot["W"] = rad_surf_west.at[calendar[i],"total"]
+	Etot["E"] = rad_surf_east.at[calendar[i],"total"]
+	Etot["H"] = rad_surf_horizon.at[calendar[i],"total"]
+	Ew_animal = glass["Transmitance"]*S["Windows_animal"]*(Etot["W"] + Etot["E"])
+	Ew_people = glass["Transmitance"]*S["Windows_animal"]*(Etot["W"] + Etot["E"])
+
+	f[3,i] = Qa
+
+	f[0,i] = 	stone["Absoptance"]*	(S["North_facade"]*Etot["N"] + S["Facade_animal"]*Etot["W"] + S["Facade_animal"]*Etot["E"])
+	f[11,i] = 	isolation["Absoptance"]*(S["North_facade"]*Etot["N"] + S["Facade_people"]*Etot["W"] + S["Facade_people"]*Etot["E"])
+	f[12,i] = 	roof["Absoptance"]*		S["Ground_animal"]*Etot["H"]
+	f[15,i] = 	roof["Absoptance"]*		S["Ground_people"]*Etot["H"]
+
+	f[2,i] = Ew_animal*S["Outdoor_wall_animal"]/S["Total_animal"]
+	f[4,i] = Ew_animal*S["North_facade"]/S["Total_animal"]
+	f[14,i] = Ew_animal*S["Ground_animal"]/S["Total_animal"]
+	f[19,i] = f[14,i]
+	f[8,i] = Ew_people*S["Outdoor_wall_people"]/S["Total_people"]
+	f[6,i] = Ew_people*S["North_facade"]/S["Total_people"]
+	f[17,i] = Ew_people*S["Ground_people"]/S["Total_people"]
+	f[21,i] = f[17,i]
+
+	Te = weather_data.at[calendar[i],'temp_air']
+	b[:,i] = dm4.temperature(Tg,Tc,Te,nq)
+
+# thermal circuit
+
+K = -A.T @ G @ A
+K11 = K[zero,:]
+K11 = K11[:,zero]
+K12 = K[zero,:]
+K12 = K12[:,nonzero]
+K21 = K[nonzero,:]
+K21 = K21[:,zero]
+K22 = K[nonzero,:]
+K22 = K22[:,nonzero]
+Cc = C[nonzero,:]
+Cc = Cc[:,nonzero]
+K11_inv = np.linalg.inv(K11)
+As = np.linalg.inv(Cc) @ (-K21 @ K11_inv @ K12 + K22)
+
+for i in range(Ntps-1):
+	J = A.T @ G @ b[:,i]
+
+	if i == 0:
+		θ[:,i] = np.linalg.inv(-K) @ (J+f[:,i])
+	Bs_u = np.linalg.inv(Cc) @ (-K21 @ K11_inv @ J[zero] +J[nonzero] -K21 @ K11_inv @ f[zero,i] +f[nonzero,i])
+	θ[nonzero,i+1] = (np.eye(len(nonzero)) + As*dt) @ θ[nonzero,i] + Bs_u
+	θ[zero,i+1] = -K11_inv @ (K12 @ θ[nonzero,i+1] + J[zero]) + f[zero,i]
+	
