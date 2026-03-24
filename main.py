@@ -35,11 +35,11 @@ Vol_people = H*Lp*B
 
 # width dictionary
 width = {}
-width["outer_stone"] = 0.2
-width["inner_stone"] = 0.2
+width["outer_stone"] = 0.5
+width["inner_stone"] = 0.1
 width["ground"] = 3
-width["roof"] = 0.2
-width["isolation"] = 0.08
+width["roof"] = 0.4
+width["isolation"] = 0.4
 width["window"] = 0.004
 
 # materials dictionaries
@@ -78,13 +78,25 @@ air = {
 }
 
 hi, he = 8, 25
-ACH = 1
-Qa = 200
+ACH_animal = 1
+ACH_humain = 1
+N_cow = 4
+Qa = 700*N_cow
 
 nq , nθ = 30 , 22
 
 Tg = 13
-Tc = 20
+Tc = 19
+
+# weather data  
+filename = 'FRA_Lyon.074810_IWEC.epw'
+[data, meta] = dm4.read_epw(filename, coerce_year=None)
+weather_data = data[["temp_air", "dir_n_rad", "dif_h_rad"]]
+weather_data.index = weather_data.index.map(lambda t: t.replace(year=2000))
+start_date = '2000-01-1'
+end_date = '2000-03-01'
+weather_data = weather_data.loc[start_date:end_date]
+calendar = weather_data.index
 
 # matrix A
 A = np.zeros([nq, nθ])
@@ -146,8 +158,10 @@ G[23] = hi * S["Ground_animal"]
 G[[24,25]] = 2 * ground["Conductivity"] / width["ground"] * S["Ground_people"]
 G[26] = hi * S["Ground_people"]
 
-G[27] = air["Specific heat"] * air["Density"] * Vol_animal * ACH/3600 + 2*S["Windows_animal"]/(1/he+width["window"]/glass["Conductivity"]+1/hi)
-G[28] = air["Specific heat"] * air["Density"] * Vol_people * ACH/3600 + 2*S["Windows_people"]/(1/he+width["window"]/glass["Conductivity"]+1/hi)
+G[27] = air["Specific heat"] * air["Density"] * Vol_animal * ACH_animal/3600 + 2*S["Windows_animal"]/(1/he+width["window"]/glass["Conductivity"]+1/hi)
+G[28] = air["Specific heat"] * air["Density"] * Vol_people * ACH_humain/3600 + 2*S["Windows_people"]/(1/he+width["window"]/glass["Conductivity"]+1/hi)
+
+G[29] = 1e9
 
 G = np.diag(G)
 
@@ -166,16 +180,6 @@ C[20] = ground["Specific heat"]*    ground["Density"]*   S["Ground_people"]*    
 #C[7] = air["Specific heat"]*air["Density"]*Vol_people
 
 C = np.diag(C)
-
-# weather data  
-filename = 'FRA_Lyon.074810_IWEC.epw'
-[data, meta] = dm4.read_epw(filename, coerce_year=None)
-weather_data = data[["temp_air", "dir_n_rad", "dif_h_rad"]]
-weather_data.index = weather_data.index.map(lambda t: t.replace(year=2000))
-start_date = '2000-06-29 12:00'
-end_date = '2000-07-02'
-weather_data = weather_data.loc[start_date:end_date]
-calendar = weather_data.index
 
 lat = 45
 # orientations of surfaces : 
@@ -202,15 +206,13 @@ if max_dt<dt:
 	print("System is chaotic")
 	quit()
 
-dt_H = dt/3600
-
 Ntps = len(weather_data)
 
 θ = np.zeros((nθ,Ntps))
 q = np.zeros((nq,Ntps))
 b = np.zeros((nq,Ntps)) 
 f = np.zeros((nθ,Ntps))
-
+J = np.zeros((nθ,Ntps))
 
 for i in range(Ntps):
 	Etot = {}
@@ -240,6 +242,8 @@ for i in range(Ntps):
 
 	Te = weather_data.at[calendar[i],'temp_air']
 	b[:,i] = dm4.temperature(Tg,Tc,Te,nq)
+	J[:,i] = A.T @ G @ b[:,i]
+
 
 # thermal circuit
 
@@ -258,11 +262,27 @@ K11_inv = np.linalg.inv(K11)
 As = np.linalg.inv(Cc) @ (-K21 @ K11_inv @ K12 + K22)
 
 for i in range(Ntps-1):
-	J = A.T @ G @ b[:,i]
-
 	if i == 0:
-		θ[:,i] = np.linalg.inv(-K) @ (J+f[:,i])
-	Bs_u = np.linalg.inv(Cc) @ (-K21 @ K11_inv @ J[zero] +J[nonzero] -K21 @ K11_inv @ f[zero,i] +f[nonzero,i])
-	θ[nonzero,i+1] = (np.eye(len(nonzero)) + As*dt) @ θ[nonzero,i] + Bs_u
-	θ[zero,i+1] = -K11_inv @ (K12 @ θ[nonzero,i+1] + J[zero]) + f[zero,i]
-	
+		θ[:,i] = np.linalg.inv(-K) @ (J[:,i]+f[:,i])
+		q[:,i] = G @ (-A @ θ[:,i] + b[:,i])
+	Bs_u = np.linalg.inv(Cc) @ (-K21 @ K11_inv @ J[zero,i] +J[nonzero,i] -K21 @ K11_inv @ f[zero,i] +f[nonzero,i])
+	θ[nonzero,i+1] = (np.eye(len(nonzero)) + As*dt) @ θ[nonzero,i] + Bs_u*dt
+	θ[zero,i+1] = -K11_inv @ (K12 @ θ[nonzero,i+1] + J[zero,i+1] + f[zero,i+1])
+	q[:,i+1] = G @ (-A @ θ[:,i+1] + b[:,i+1])
+
+temp_anim = θ[3,:]
+temp_people = θ[7,:]
+T_ext = weather_data['temp_air']
+
+plt.figure(1)
+plt.plot(calendar,T_ext,'-b',calendar,temp_anim,'-+r',calendar,temp_people,'-+k')
+plt.xlabel("Time")
+plt.ylabel("Dry-bulb air temperature, θ / °C")
+plt.legend(["T exterior","T aniaml","T people"])
+
+plt.figure(2)
+plt.plot(calendar,q[29,:],'-+r')
+plt.xlabel("Time")
+plt.ylabel("Controler power W")
+plt.legend([])
+plt.show()

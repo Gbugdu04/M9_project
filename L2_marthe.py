@@ -275,5 +275,3 @@ f[ground_animals] = (Swindows_animals/2 * Ee + Swindows_animals/2 * Ew) * Tau * 
 
 ground_humans = [9]
 f[ground_humans] = (Swindows_humans/2 * Ee + Swindows_humans/2 * Ew) * Tau * Sroof_h/(Sroom_humans)
-
-
