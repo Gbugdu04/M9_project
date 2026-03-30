@@ -35,11 +35,11 @@ Vol_people = H*Lp*B
 
 # width dictionary
 width = {}
-width["outer_stone"] = 0.5
-width["inner_stone"] = 0.1
+width["outer_stone"] = 0.2
+width["inner_stone"] = 0.2
 width["ground"] = 3
-width["roof"] = 0.4
-width["isolation"] = 0.4
+width["roof"] = 0.2
+width["isolation"] = 0.08
 width["window"] = 0.004
 
 # materials dictionaries
@@ -47,19 +47,19 @@ stone = {
     "Conductivity": 3.500,       # W/(m·K)
     "Density": 2800.0,           # kg/m³
     "Specific heat": 1000,       # J/(kg⋅K)"
-    "Absoptance":0.6,            # NaN
+    "Absorbance":0.6,            # NaN
 }
 isolation = {                    # in cork
     "Conductivity": 0.050,       # W/(m·K)
     "Density": 200.0,            # kg/m³
     "Specific heat": 1560,       # J/(kg⋅K)"
-	"Absoptance":0.6,            # NaN
+	"Absorbance":0.6,            # NaN
 }
 roof = {                         # in wood / oak
     "Conductivity": 0.180,       # W/(m·K)
     "Density": 2000.0,           # kg/m³
     "Specific heat": 705,        # J/(kg⋅K)"
-    "Absoptance":0.7,            # NaN
+    "Absorbance":0.7,            # NaN
 }
 glass = {                         
     "Conductivity": 1.400,       # W/(m·K)
@@ -78,23 +78,39 @@ air = {
 }
 
 hi, he = 8, 25
-ACH_animal = 1
-ACH_humain = 1
+case = "summer"
+if case == "winter":
+	ACH_animal = 1
+	ACH_humain = 1
+	start_date = '2000-01-1'
+	end_date = '2000-03-01'	
+	G_control = 1e9
+elif case == "summer":
+	ACH_animal = 25
+	ACH_humain = 25
+	start_date = '2000-07-1'
+	end_date = '2000-09-01'	
+	G_control = 0
+else:
+	ACH_animal = 1
+	ACH_humain = 1
+	start_date = '2000-01-1'
+	end_date = '2000-03-01'	
+	G_control = 0	
+
 N_cow = 4
 Qa = 700*N_cow
 
 nq , nθ = 30 , 22
 
 Tg = 13
-Tc = 19
+Tc = 20
 
 # weather data  
 filename = 'FRA_Lyon.074810_IWEC.epw'
 [data, meta] = dm4.read_epw(filename, coerce_year=None)
 weather_data = data[["temp_air", "dir_n_rad", "dif_h_rad"]]
 weather_data.index = weather_data.index.map(lambda t: t.replace(year=2000))
-start_date = '2000-01-1'
-end_date = '2000-03-01'
 weather_data = weather_data.loc[start_date:end_date]
 calendar = weather_data.index
 
@@ -161,7 +177,7 @@ G[26] = hi * S["Ground_people"]
 G[27] = air["Specific heat"] * air["Density"] * Vol_animal * ACH_animal/3600 + 2*S["Windows_animal"]/(1/he+width["window"]/glass["Conductivity"]+1/hi)
 G[28] = air["Specific heat"] * air["Density"] * Vol_people * ACH_humain/3600 + 2*S["Windows_people"]/(1/he+width["window"]/glass["Conductivity"]+1/hi)
 
-G[29] = 1e9
+G[29] = G_control
 
 G = np.diag(G)
 
@@ -200,12 +216,7 @@ rad_surf_north = dm4.sol_rad_tilt_surf(weather_data, wall_north, albedo)
 rad_surf_south = dm4.sol_rad_tilt_surf(weather_data, wall_south, albedo)
 rad_surf_horizon = dm4.sol_rad_tilt_surf(weather_data, roof_horizontal, albedo)
 
-max_dt,zero,nonzero = dm4.eigenvalues_analysis(C,A,G)
 dt = 3600
-if max_dt<dt:
-	print("System is chaotic")
-	quit()
-
 Ntps = len(weather_data)
 
 θ = np.zeros((nθ,Ntps))
@@ -226,10 +237,10 @@ for i in range(Ntps):
 
 	f[3,i] = Qa
 
-	f[0,i] = 	stone["Absoptance"]*	(S["North_facade"]*Etot["N"] + S["Facade_animal"]*Etot["W"] + S["Facade_animal"]*Etot["E"])
-	f[11,i] = 	isolation["Absoptance"]*(S["North_facade"]*Etot["N"] + S["Facade_people"]*Etot["W"] + S["Facade_people"]*Etot["E"])
-	f[12,i] = 	roof["Absoptance"]*		S["Ground_animal"]*Etot["H"]
-	f[15,i] = 	roof["Absoptance"]*		S["Ground_people"]*Etot["H"]
+	f[0,i] = 	stone["Absorbance"]*	(S["North_facade"]*Etot["N"] + S["Facade_animal"]*Etot["W"] + S["Facade_animal"]*Etot["E"])
+	f[11,i] = 	isolation["Absorbance"]*(S["North_facade"]*Etot["N"] + S["Facade_people"]*Etot["W"] + S["Facade_people"]*Etot["E"])
+	f[12,i] = 	roof["Absorbance"]*		S["Ground_animal"]*Etot["H"]
+	f[15,i] = 	roof["Absorbance"]*		S["Ground_people"]*Etot["H"]
 
 	f[2,i] = Ew_animal*S["Outdoor_wall_animal"]/S["Total_animal"]
 	f[4,i] = Ew_animal*S["North_facade"]/S["Total_animal"]
@@ -246,6 +257,10 @@ for i in range(Ntps):
 
 
 # thermal circuit
+max_dt,zero,nonzero = dm4.eigenvalues_analysis(C,A,G)
+if max_dt<dt:
+	print("System is chaotic")
+	quit()
 
 K = -A.T @ G @ A
 K11 = K[zero,:]
@@ -277,12 +292,14 @@ T_ext = weather_data['temp_air']
 plt.figure(1)
 plt.plot(calendar,T_ext,'-b',calendar,temp_anim,'-+r',calendar,temp_people,'-+k')
 plt.xlabel("Time")
-plt.ylabel("Dry-bulb air temperature, θ / °C")
-plt.legend(["T exterior","T aniaml","T people"])
+plt.ylabel("Temperature °C")
+plt.legend(["θ exterior","θ animal","θ living area"])
+plt.title("Temperature changes in the building")
 
 plt.figure(2)
 plt.plot(calendar,q[29,:],'-+r')
 plt.xlabel("Time")
 plt.ylabel("Controler power W")
 plt.legend([])
+plt.title("Flow-rate of the controller")
 plt.show()
